@@ -24,3 +24,10 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+input,
+span,
+h1,
+textarea {
+  color: #0a0a0a;
+}

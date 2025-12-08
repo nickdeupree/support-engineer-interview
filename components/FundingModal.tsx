@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { trpc } from "@/lib/trpc/client";
+import isCreditCard from 'validator/lib/isCreditCard';
 
 interface FundingModalProps {
   accountId: number;
@@ -71,11 +72,11 @@ export function FundingModal({ accountId, onClose, onSuccess }: FundingModalProp
                 {...register("amount", {
                   required: "Amount is required",
                   pattern: {
-                    value: /^\d+\.?\d{0,2}$/,
-                    message: "Invalid amount format",
+                    value: /^(?:[1-9]\d*(?:\.\d{1,2})?|0\.\d{1,2})$/,
+                    message: "Invalid amount format — remove leading zeros (e.g. 10 or 0.50)",
                   },
                   min: {
-                    value: 0.0,
+                    value: 0.01,
                     message: "Amount must be at least $0.01",
                   },
                   max: {
@@ -119,7 +120,7 @@ export function FundingModal({ accountId, onClose, onSuccess }: FundingModalProp
                 validate: {
                   validCard: (value) => {
                     if (fundingType !== "card") return true;
-                    return value.startsWith("4") || value.startsWith("5") || "Invalid card number";
+                    return isCreditCard(value) || "Invalid card number";
                   },
                 },
               })}

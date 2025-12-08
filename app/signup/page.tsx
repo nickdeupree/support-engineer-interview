@@ -4,7 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { trpc } from "@/lib/trpc/client";
+import { isValidEmail, suggestEmailCorrection } from '@/lib/email-validator';
+import { isValidPhoneNumber } from '@/lib/phone-validator';
+import validator from 'validator';
 import Link from "next/link";
+var MailChecker = require("mailchecker");
 
 type SignupFormData = {
   email: string;
@@ -32,7 +36,9 @@ export default function SignupPage() {
     formState: { errors },
     watch,
     trigger,
+    setValue,
   } = useForm<SignupFormData>();
+  const [emailSuggestion, setEmailSuggestion] = useState<string | null>(null);
   const signupMutation = trpc.auth.signup.useMutation();
 
   const password = watch("password");
@@ -82,15 +88,25 @@ export default function SignupPage() {
                 <input
                   {...register("email", {
                     required: "Email is required",
-                    pattern: {
-                      value: /^\S+@\S+$/i,
-                      message: "Invalid email address",
+                    validate: (value) => isValidEmail(value) || "Invalid email address",
+                    onBlur: (e) => {
+                      const suggestion = suggestEmailCorrection(e.target.value || "");
+                      setEmailSuggestion(suggestion);
                     },
                   })}
                   type="email"
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border"
                 />
                 {errors.email && <p className="mt-1 text-sm text-red-600">{errors.email.message}</p>}
+                {emailSuggestion && (
+                      <div className="mt-1 text-sm text-yellow-700">
+                    Did you mean <button type="button" onClick={() => {
+                      // replace the email value using react-hook-form's setValue
+                      setValue('email', emailSuggestion as string);
+                      setEmailSuggestion(null);
+                    }} className="underline font-medium">{emailSuggestion}</button>?
+                  </div>
+                )}
               </div>
 
               <div>
@@ -101,15 +117,13 @@ export default function SignupPage() {
                   {...register("password", {
                     required: "Password is required",
                     minLength: {
-                      value: 8,
-                      message: "Password must be at least 8 characters",
+                      value: 12,
+                      message: "Password must be at least 12 characters",
                     },
                     validate: {
-                      notCommon: (value) => {
-                        const commonPasswords = ["password", "12345678", "qwerty"];
-                        return !commonPasswords.includes(value.toLowerCase()) || "Password is too common";
-                      },
                       hasNumber: (value) => /\d/.test(value) || "Password must contain a number",
+                      hasUpperCase: (value) => /[A-Z]/.test(value) || "Password must contain an uppercase letter",
+                      hasSymbol: (value) => /[!@#$%^&*(),.?":{}|<>]/.test(value) || "Password must contain a special character",
                     },
                   })}
                   type="password"
@@ -172,29 +186,34 @@ export default function SignupPage() {
                 <input
                   {...register("phoneNumber", {
                     required: "Phone number is required",
-                    pattern: {
-                      value: /^\d{10}$/,
-                      message: "Phone number must be 10 digits",
-                    },
+                    validate: (value) => isValidPhoneNumber(value) || "Invalid phone number format. Accepted formats: 10-digit US (1234567890), +1 (123) 456-7890, or international (+44 20 7946 0958)",
                   })}
                   type="tel"
-                  placeholder="1234567890"
+                  placeholder="+1 (123) 456-7890 or +44 20 7946 0958"
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border"
                 />
                 {errors.phoneNumber && <p className="mt-1 text-sm text-red-600">{errors.phoneNumber.message}</p>}
               </div>
 
-              <div>
+                <div>
                 <label htmlFor="dateOfBirth" className="block text-sm font-medium text-gray-700">
                   Date of Birth
                 </label>
                 <input
-                  {...register("dateOfBirth", { required: "Date of birth is required" })}
+                  {...register("dateOfBirth", { 
+                  required: "Date of birth is required",
+                  validate: (value) => {
+                    const today = new Date();
+                    const eighteenYearsAgo = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
+                    const dob = new Date(value);
+                    return dob <= eighteenYearsAgo || "You must be at least 18 years old";
+                  }
+                   })}
                   type="date"
                   className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2 border"
                 />
                 {errors.dateOfBirth && <p className="mt-1 text-sm text-red-600">{errors.dateOfBirth.message}</p>}
-              </div>
+                </div>
             </div>
           )}
 
@@ -252,9 +271,15 @@ export default function SignupPage() {
                     {...register("state", {
                       required: "State is required",
                       pattern: {
-                        value: /^[A-Z]{2}$/,
-                        message: "Use 2-letter state code",
+                      value: /^[A-Z]{2}$/,
+                      message: "Use 2-letter state code",
                       },
+                      validate: {
+                      validState: (value) => {
+                        const validStates = ['AL', 'AK', 'AZ', 'AR', 'CA', 'CO', 'CT', 'DE', 'FL', 'GA', 'HI', 'ID', 'IL', 'IN', 'IA', 'KS', 'KY', 'LA', 'ME', 'MD', 'MA', 'MI', 'MN', 'MS', 'MO', 'MT', 'NE', 'NV', 'NH', 'NJ', 'NM', 'NY', 'NC', 'ND', 'OH', 'OK', 'OR', 'PA', 'RI', 'SC', 'SD', 'TN', 'TX', 'UT', 'VT', 'VA', 'WA', 'WV', 'WI', 'WY'];
+                        return validStates.includes(value) || "Invalid state code";
+                      }
+                      }
                     })}
                     type="text"
                     placeholder="CA"
