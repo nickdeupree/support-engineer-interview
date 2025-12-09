@@ -26,7 +26,7 @@ Added a validator that calculates the minimum valid birth year by subtracting 18
 **Prevention:**  
 Use dynamic validation for age-based requirements.
 
-**Tests**
+**Tests:**
 dateOfBirth.test.ts
 
 ---
@@ -41,7 +41,7 @@ Implemented an enhanced email validator that detects uppercase usage, enforces v
 **Prevention:**  
 Use well-tested validators for email fields and provide user feedback when modifying input.
 
-**Tests**
+**Tests:**
 emailValidation.test.ts
 
 ---
@@ -56,7 +56,7 @@ Set the minimum amount to 0.01 so the frontend blocks invalid submissions.
 **Prevention:**  
 Always enforce frontend minimums and maximums for numeric inputs.
 
-**Tests**
+**Tests:**
 zeroFunding.test.ts
 
 ---
@@ -71,8 +71,9 @@ Used the validator package and `isCreditCard` to verify card numbers against mul
 **Prevention:**  
 Use robust validation libraries instead of simplistic custom checks.
 
-**Tests**
+**Tests:**
 cardValidation.test.ts
+
 ---
 
 ## Ticket VAL-208: Weak Password Requirements
@@ -85,8 +86,9 @@ Added a stronger validator requiring at least 12 characters, one uppercase lette
 **Prevention:**  
 Stay current with modern password standards and update validators as needed.
 
-**Tests**
+**Tests:**
 passwordValidation.test.ts
+
 ---
 
 ## Ticket VAL-209: Leading Zero Amounts
@@ -99,8 +101,8 @@ Enhanced the regex to reject invalid leading zeros while still allowing a single
 **Prevention:**  
 Define strict numeric formatting rules for all financial fields.
 
-**Tests**
-zeroFunding.test.ts ( this tests for leading 0's in a few cases )
+**Tests:**
+zeroFunding.test.ts ( this Tests: for leading 0's in a few cases )
 
 ---
 
@@ -114,7 +116,7 @@ Applied the validator package to validate a wide range of card types.
 **Prevention:**  
 Centralize card validation logic to ensure consistent rules.
 
-**Tests**
+**Tests:**
 cardValidation.test.ts
 
 ---
@@ -129,7 +131,7 @@ Validated the input against a list of the 50 US state codes.
 **Prevention:**  
 Ensure address fields include semantic validation rather than pure formatting checks.
 
-**Tests**
+**Tests:**
 stateValidation.test.ts
 
 ---
@@ -144,7 +146,7 @@ Integrated libphonenumber-js to parse and validate real numbers with region awar
 **Prevention:**  
 Use region-aware libraries for phone number validation.
 
-**Tests**
+**Tests:**
 phoneValidation.test.ts
 
 ---
@@ -159,7 +161,7 @@ Backend now requires a routing number when the funding method is bank transfer.
 **Prevention:**  
 Keep backend and frontend validation rules aligned.
 
-**Tests**
+**Tests:**
 noRouting.test.ts
 
 ---
@@ -175,7 +177,7 @@ SSNs are now hashed using the same technique used for passwords.
 Treat sensitive personal data with the same protections as authentication credentials.
 
 
-**Tests**
+**Tests:**
 ssnStore.test.ts
 
 ---
@@ -190,7 +192,7 @@ Removed `dangerouslySetInnerHTML` and rendered descriptions as plain text.
 **Prevention:**  
 Avoid raw HTML injection points unless absolutely necessary and sanitize when required.
 
-**Tests**
+**Tests:**
 xssVulnerability.test.tsx
 
 ---
@@ -217,7 +219,7 @@ Expired sessions are removed at login and signup. Logout deletes the session rec
 **Prevention:**  
 Implement periodic cleanup and enforce consistent session lifecycle rules.
 
-**Tests**
+**Tests:**
 sessionMgmt.test.ts
 
 ---
@@ -304,8 +306,9 @@ Added ordering by created_at in descending order.
 **Prevention:**  
 Always specify ordering for user-facing data.
 
-**Tests**
+**Tests:**
 transactionSorting.test.ts
+
 ---
 
 ## Ticket PERF-402: Logout Always Reported Success
@@ -318,7 +321,7 @@ Now returns false when no session is found and only clears the cookie after the 
 **Prevention:**  
 Return accurate status responses for authentication flows.
 
-**Tests**
+**Tests:**
 logoutFalseSuccess.test.ts
 
 ---
