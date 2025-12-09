@@ -10,13 +10,18 @@ const commonTypoMap: Record<string, string> = {
   '.cm': '.com',
   '.om': '.com',
   '.ort': '.org',
-  '.gamil.com': '.gmail.com',
-  '.gnail.com': '.gmail.com',
+  'gamil.com': 'gmail.com',
+  'gnail.com': 'gmail.com',
 };
 
 export function suggestEmailCorrection(email: string): string | null {
   try {
-    const lower = email.toLowerCase().trim();
+    const trimmed = email.trim();
+    // If any part of the email is uppercase, suggest lowercase
+    if (trimmed !== trimmed.toLowerCase()) {
+      return trimmed.toLowerCase();
+    }
+    const lower = trimmed.toLowerCase();
     const domain = lower.split('@')[1];
     if (!domain) return null;
 

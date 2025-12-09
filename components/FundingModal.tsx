@@ -9,6 +9,7 @@ interface FundingModalProps {
   accountId: number;
   onClose: () => void;
   onSuccess: () => void;
+  onFundingComplete?: () => void;
 }
 
 type FundingFormData = {
@@ -18,7 +19,7 @@ type FundingFormData = {
   routingNumber?: string;
 };
 
-export function FundingModal({ accountId, onClose, onSuccess }: FundingModalProps) {
+export function FundingModal({ accountId, onClose, onSuccess, onFundingComplete }: FundingModalProps) {
   const [error, setError] = useState("");
   const {
     register,
@@ -50,6 +51,9 @@ export function FundingModal({ accountId, onClose, onSuccess }: FundingModalProp
         },
       });
 
+      if (onFundingComplete) {
+        onFundingComplete();
+      }
       onSuccess();
     } catch (err: any) {
       setError(err.message || "Failed to fund account");

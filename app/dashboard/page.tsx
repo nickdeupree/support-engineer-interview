@@ -12,6 +12,7 @@ export default function DashboardPage() {
   const [isCreatingAccount, setIsCreatingAccount] = useState(false);
   const [fundingAccountId, setFundingAccountId] = useState<number | null>(null);
   const [selectedAccountId, setSelectedAccountId] = useState<number | null>(null);
+  const [transactionRefreshKey, setTransactionRefreshKey] = useState(0);
 
   const { data: accounts, refetch: refetchAccounts } = trpc.account.getAccounts.useQuery();
   const logoutMutation = trpc.auth.logout.useMutation();
@@ -107,7 +108,7 @@ export default function DashboardPage() {
           {selectedAccountId && (
             <div className="mt-8">
               <h3 className="text-xl font-bold text-gray-900 mb-4">Transaction History</h3>
-              <TransactionList accountId={selectedAccountId} />
+              <TransactionList accountId={selectedAccountId} refreshTrigger={transactionRefreshKey} />
             </div>
           )}
         </div>
@@ -130,6 +131,9 @@ export default function DashboardPage() {
           onSuccess={() => {
             setFundingAccountId(null);
             refetchAccounts();
+          }}
+          onFundingComplete={() => {
+            setTransactionRefreshKey(prev => prev + 1);
           }}
         />
       )}

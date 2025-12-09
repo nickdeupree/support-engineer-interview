@@ -123,6 +123,7 @@ export default function SignupPage() {
                     validate: {
                       hasNumber: (value) => /\d/.test(value) || "Password must contain a number",
                       hasUpperCase: (value) => /[A-Z]/.test(value) || "Password must contain an uppercase letter",
+                      hasLowerCase: (value) => /[a-z]/.test(value) || "Password must contain a lowercase letter",
                       hasSymbol: (value) => /[!@#$%^&*(),.?":{}|<>]/.test(value) || "Password must contain a special character",
                     },
                   })}
@@ -186,7 +187,7 @@ export default function SignupPage() {
                 <input
                   {...register("phoneNumber", {
                     required: "Phone number is required",
-                    validate: (value) => isValidPhoneNumber(value) || "Invalid phone number format. Accepted formats: 10-digit US (1234567890), +1 (123) 456-7890, or international (+44 20 7946 0958)",
+                    validate: (value) => isValidPhoneNumber(value) || "Invalid Phone Number",
                   })}
                   type="tel"
                   placeholder="+1 (123) 456-7890 or +44 20 7946 0958"

@@ -53,14 +53,18 @@ export async function createContext(opts: CreateNextContextOptions | FetchCreate
       };
 
       const session = await db.select().from(sessions).where(eq(sessions.token, token)).get();
+      const now = Date.now();
+      const EXPIRATION_BUFFER = 5000;
 
-      if (session && new Date(session.expiresAt).getTime() > Date.now()) {
+      if (session && new Date(session.expiresAt).getTime() > (now + EXPIRATION_BUFFER)) {
         user = await db.select().from(users).where(eq(users.id, decoded.userId)).get();
-        const expiresIn = new Date(session.expiresAt).getTime() - new Date().getTime();
-        if (expiresIn < 60000) {
-          console.warn("Session about to expire");
+        const timeRemaining = new Date(session.expiresAt).getTime() - now;
+        if (timeRemaining < 60000) {
+          console.log(`Session valid, but expiring soon: ${timeRemaining}ms remaining`);
         }
-      }
+      } else if (session) {
+        console.warn(`Session rejected: Within ${EXPIRATION_BUFFER}ms buffer of expiry.`);
+            }
     } catch (error) {
       // Invalid token
     }

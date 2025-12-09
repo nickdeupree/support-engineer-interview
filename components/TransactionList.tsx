@@ -1,13 +1,39 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc/client";
 
 interface TransactionListProps {
   accountId: number;
+  refreshTrigger?: number;
 }
 
-export function TransactionList({ accountId }: TransactionListProps) {
-  const { data: transactions, isLoading } = trpc.account.getTransactions.useQuery({ accountId });
+export function TransactionList({ accountId, refreshTrigger }: TransactionListProps) {
+  const PAGE_SIZE = 10;
+  const [offset, setOffset] = useState(0);
+  const [allTransactions, setAllTransactions] = useState<any[]>([]);
+
+  const { data: page, isLoading, refetch } = trpc.account.getTransactions.useQuery({ accountId, limit: PAGE_SIZE, offset });
+
+  useEffect(() => {
+    if (refreshTrigger !== undefined) {
+      // reset to first page when triggered
+      setOffset(0);
+      setAllTransactions([]);
+      refetch();
+    }
+  }, [refreshTrigger, refetch]);
+
+  useEffect(() => {
+    // Append page results to list and dedupe by id
+    if (page && Array.isArray(page)) {
+      setAllTransactions((prev) => {
+        const ids = new Set(prev.map((p) => p.id));
+        const combined = [...prev, ...page.filter((p) => !ids.has(p.id))];
+        return combined;
+      });
+    }
+  }, [page]);
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-US", {
@@ -34,7 +60,7 @@ export function TransactionList({ accountId }: TransactionListProps) {
     );
   }
 
-  if (!transactions || transactions.length === 0) {
+  if ((!allTransactions || allTransactions.length === 0) && !isLoading) {
     return (
       <div className="bg-white shadow rounded-lg p-6">
         <p className="text-gray-500">No transactions yet.</p>
@@ -57,7 +83,7 @@ export function TransactionList({ accountId }: TransactionListProps) {
           </tr>
         </thead>
         <tbody className="bg-white divide-y divide-gray-200">
-          {transactions.map((transaction) => (
+          {allTransactions.map((transaction) => (
             <tr key={transaction.id}>
               <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                 <span>
@@ -93,6 +119,15 @@ export function TransactionList({ accountId }: TransactionListProps) {
           ))}
         </tbody>
       </table>
+      <div className="p-4 bg-white border-t flex justify-center">
+        <button
+          className="px-4 py-2 bg-blue-600 text-white rounded-md"
+          onClick={() => setOffset((o) => o + PAGE_SIZE)}
+          disabled={isLoading}
+        >
+          {isLoading ? "Loading..." : "Load more"}
+        </button>
+      </div>
     </div>
   );
 }

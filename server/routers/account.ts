@@ -3,7 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { protectedProcedure, router } from "../trpc";
 import { db } from "@/lib/db";
 import { accounts, transactions } from "@/lib/db/schema";
-import { eq, and } from "drizzle-orm";
+import { eq, and, sql, desc } from "drizzle-orm";
 
 function generateAccountNumber(): string {
   const buffer = new Uint8Array(5);
@@ -57,17 +57,14 @@ export const accountRouter = router({
       // Fetch the created account
       const account = await db.select().from(accounts).where(eq(accounts.accountNumber, accountNumber!)).get();
 
-      return (
-        account || {
-          id: 0,
-          userId: ctx.user.id,
-          accountNumber: accountNumber!,
-          accountType: input.accountType,
-          balance: 100,
-          status: "pending",
-          createdAt: new Date().toISOString(),
-        }
-      );
+      if (account){
+        return account;
+      }
+      throw new TRPCError({
+        code: "INTERNAL_SERVER_ERROR",
+        message: "Failed to create account",
+      });
+      
     }),
 
   getAccounts: protectedProcedure.query(async ({ ctx }) => {
@@ -86,7 +83,19 @@ export const accountRouter = router({
           accountNumber: z.string(),
           routingNumber: z.string().optional(),
         }),
-      })
+      }).refine(
+        (data) => {
+          // Routing number is required for bank transfers
+          if (data.fundingSource.type === "bank") {
+            return !!data.fundingSource.routingNumber;
+          }
+          return true;
+        },
+        {
+          message: "Routing number is required for bank transfers",
+          path: ["fundingSource", "routingNumber"],
+        }
+      )
     )
     .mutation(async ({ input, ctx }) => {
       const amount = parseFloat(input.amount.toString());
@@ -112,35 +121,38 @@ export const accountRouter = router({
         });
       }
 
-      // Create transaction
-      await db.insert(transactions).values({
-        accountId: input.accountId,
-        type: "deposit",
-        amount,
-        description: `Funding from ${input.fundingSource.type}`,
-        status: "completed",
-        processedAt: new Date().toISOString(),
+      const result = db.transaction((tx) => {
+        const transaction = tx
+          .insert(transactions)
+          .values({
+            accountId: input.accountId,
+            type: "deposit",
+            amount,
+            description: `Funding from ${input.fundingSource.type}`,
+            status: "completed",
+            processedAt: new Date().toISOString(),
+          })
+          .returning()
+          .get();
+
+        const updatedAccount = tx
+          .update(accounts)
+          .set({
+            balance: sql`${accounts.balance} + ${amount}`,
+          })
+          .where(eq(accounts.id, input.accountId))
+          .returning()
+          .get();
+
+        return {
+          transaction,
+          updatedAccount,
+        };
       });
 
-      // Fetch the created transaction
-      const transaction = await db.select().from(transactions).orderBy(transactions.createdAt).limit(1).get();
-
-      // Update account balance
-      await db
-        .update(accounts)
-        .set({
-          balance: account.balance + amount,
-        })
-        .where(eq(accounts.id, input.accountId));
-
-      let finalBalance = account.balance;
-      for (let i = 0; i < 100; i++) {
-        finalBalance = finalBalance + amount / 100;
-      }
-
       return {
-        transaction,
-        newBalance: finalBalance, // This will be slightly off due to float precision
+        transaction: result.transaction,
+        newBalance: result.updatedAccount?.balance ?? null,
       };
     }),
 
@@ -148,10 +160,11 @@ export const accountRouter = router({
     .input(
       z.object({
         accountId: z.number(),
+        limit: z.number().int().positive().optional(),
+        offset: z.number().int().min(0).optional(),
       })
     )
     .query(async ({ input, ctx }) => {
-      // Verify account belongs to user
       const account = await db
         .select()
         .from(accounts)
@@ -165,20 +178,23 @@ export const accountRouter = router({
         });
       }
 
+      const limit = input.limit ?? 10;
+      const offset = input.offset ?? 0;
+
+      // Query transactions and use ordering + limit/offset for pagination
       const accountTransactions = await db
         .select()
         .from(transactions)
-        .where(eq(transactions.accountId, input.accountId));
+        .where(eq(transactions.accountId, input.accountId))
+        .orderBy(desc(transactions.createdAt))
+        .limit(limit)
+        .offset(offset);
 
-      const enrichedTransactions = [];
-      for (const transaction of accountTransactions) {
-        const accountDetails = await db.select().from(accounts).where(eq(accounts.id, transaction.accountId)).get();
-
-        enrichedTransactions.push({
-          ...transaction,
-          accountType: accountDetails?.accountType,
-        });
-      }
+      // Since we already fetched the account above, reuse it to avoid per-transaction lookups
+      const enrichedTransactions = accountTransactions.map((transaction) => ({
+        ...transaction,
+        accountType: account.accountType,
+      }));
 
       return enrichedTransactions;
     }),

@@ -8,6 +8,50 @@ import { users, sessions } from "@/lib/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { isValidPhoneNumber, formatPhoneNumber } from "@/lib/phone-validator";
 
+async function cleanupExpiredSessionsHelper(userId?: string | number) {
+  const now = new Date().toISOString();
+  if (userId) {
+    await db
+      .delete(sessions)
+      .where(sql`${sessions.userId} = ${userId} AND ${sessions.expiresAt} <= ${now}`);
+  } else {
+    await db
+      .delete(sessions)
+      .where(sql`${sessions.expiresAt} <= ${now}`);
+  }
+}
+
+function setSessionCookie(res: any, token?: string | null) {
+  const cookie = token
+    ? `session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=604800`
+    : `session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`;
+
+  if (res && "setHeader" in res) {
+    res.setHeader("Set-Cookie", cookie);
+  } else if (res) {
+    (res as Headers).set("Set-Cookie", cookie);
+  }
+}
+
+async function createSession(userId: number, res: any) {
+  const token = jwt.sign({ userId }, process.env.JWT_SECRET || "temporary-secret-for-interview", {
+    expiresIn: "7d",
+  });
+
+  const expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 7);
+
+  await db.insert(sessions).values({
+    userId,
+    token,
+    expiresAt: expiresAt.toISOString(),
+  });
+
+  setSessionCookie(res, token);
+
+  return token;
+}
+
 export const authRouter = router({
   signup: publicProcedure
     .input(
@@ -40,10 +84,8 @@ export const authRouter = router({
 
       const hashedPassword = await bcrypt.hash(input.password, 10);
 
-      // Hash SSN before storing in database
       const hashedSSN = await bcrypt.hash(input.ssn, 10);
 
-      // Normalize phone number to E.164 format for consistent storage
       const formattedPhoneNumber = formatPhoneNumber(input.phoneNumber);
       if (!formattedPhoneNumber) {
         throw new TRPCError({
@@ -59,7 +101,6 @@ export const authRouter = router({
         ssn: hashedSSN,
       });
 
-      // Fetch the created user
       const user = await db.select().from(users).where(eq(users.email, input.email)).get();
 
       if (!user) {
@@ -69,32 +110,9 @@ export const authRouter = router({
         });
       }
 
-      // Clean up expired sessions for this user before creating new one
-      const now = new Date().toISOString();
-      await db
-        .delete(sessions)
-        .where(sql`${sessions.userId} = ${user.id} AND ${sessions.expiresAt} <= ${now}`);
+      await cleanupExpiredSessionsHelper(user.id);
 
-      // Create session
-      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET || "temporary-secret-for-interview", {
-        expiresIn: "7d",
-      });
-
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 7);
-
-      await db.insert(sessions).values({
-        userId: user.id,
-        token,
-        expiresAt: expiresAt.toISOString(),
-      });
-
-      // Set cookie
-      if ("setHeader" in ctx.res) {
-        ctx.res.setHeader("Set-Cookie", `session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=604800`);
-      } else {
-        (ctx.res as Headers).set("Set-Cookie", `session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=604800`);
-      }
+      const token = await createSession(user.id, ctx.res);
 
       return { user: { ...user, password: undefined }, token };
     }),
@@ -125,112 +143,79 @@ export const authRouter = router({
         });
       }
 
-      // Clean up expired sessions for this user before creating new one
-      const now = new Date().toISOString();
-      await db
-        .delete(sessions)
-        .where(sql`${sessions.userId} = ${user.id} AND ${sessions.expiresAt} <= ${now}`);
+      await cleanupExpiredSessionsHelper(user.id);
 
-      const token = jwt.sign({ userId: user.id }, process.env.JWT_SECRET || "temporary-secret-for-interview", {
-        expiresIn: "7d",
-      });
-
-      const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 7);
-
-      await db.insert(sessions).values({
-        userId: user.id,
-        token,
-        expiresAt: expiresAt.toISOString(),
-      });
-
-      if ("setHeader" in ctx.res) {
-        ctx.res.setHeader("Set-Cookie", `session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=604800`);
-      } else {
-        (ctx.res as Headers).set("Set-Cookie", `session=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=604800`);
-      }
+      const token = await createSession(user.id, ctx.res);
 
       return { user: { ...user, password: undefined }, token };
     }),
 
   logout: publicProcedure.mutation(async ({ ctx }) => {
-    // Delete session from database
     let token: string | undefined;
-    if ("cookies" in ctx.req) {
-      token = (ctx.req as any).cookies.session;
-    } else {
-      const cookieHeader = ctx.req.headers.get?.("cookie") || (ctx.req.headers as any).cookie;
-      token = cookieHeader
-        ?.split("; ")
-        .find((c: string) => c.startsWith("session="))
-        ?.split("=")[1];
+    if (ctx.req && ctx.req.cookies && typeof ctx.req.cookies === 'object') {
+      token = ctx.req.cookies.session;
     }
-    
-    let sessionDeleted = false;
-    if (token) {
+    if (!token) {
+      let cookieHeader = '';
+      if (ctx.req && ctx.req.headers) {
+        if (typeof ctx.req.headers.get === 'function') {
+          cookieHeader = ctx.req.headers.get('cookie') || '';
+        } else if (ctx.req.headers.cookie) {
+          cookieHeader = ctx.req.headers.cookie;
+        }
+      }
+      if (cookieHeader) {
+        const cookiesArr = cookieHeader.split(';');
+        for (const c of cookiesArr) {
+          const [key, ...val] = c.trim().split('=');
+          if (key === 'session') {
+            token = val.join('=');
+            break;
+          }
+        }
+      }
+    }
+    if (!token && ctx.req && ctx.req.body && ctx.req.body.session) {
+      token = ctx.req.body.session;
+    }
+
+    if (!token) {
+      console.log("Logout failed: No session token found");
+      return {
+        success: false,
+        message: "No active session found"
+      };
+    }
+
+    try {
+      const existing = await db.select().from(sessions).where(eq(sessions.token, token)).get();
+      if (!existing) {
+        console.log("Logout failed: No session token found in DB for", token);
+        return {
+          success: false,
+          message: "No active session found",
+        };
+      }
+
       await db.delete(sessions).where(eq(sessions.token, token));
-      console.log("Session with token", token, "deleted");
-      sessionDeleted = true;
-    }
 
-    // Clear cookie regardless of whether session was found
-    if ("setHeader" in ctx.res) {
-      ctx.res.setHeader("Set-Cookie", `session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`);
-    } else {
-      (ctx.res as Headers).set("Set-Cookie", `session=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`);
-    }
+      setSessionCookie(ctx.res, null);
 
-    return { 
-      success: true, 
-      message: sessionDeleted ? "Logged out successfully" : "Session cleared" 
-    };
+      return {
+        success: true,
+        message: "Logged out successfully",
+      };
+    } catch (error) {
+      console.error("Failed to delete session:", error);
+      return {
+        success: false,
+        message: "Failed to logout",
+      };
+    }
   }),
 
-  // Logout from all devices except current session
-  logoutAllOtherSessions: publicProcedure.mutation(async ({ ctx }) => {
-    if (!ctx.user) {
-      throw new TRPCError({
-        code: "UNAUTHORIZED",
-        message: "Must be logged in to logout other sessions",
-      });
-    }
-
-    // Get current session token
-    let currentToken: string | undefined;
-    if ("cookies" in ctx.req) {
-      currentToken = (ctx.req as any).cookies.session;
-    } else {
-      const cookieHeader = ctx.req.headers.get?.("cookie") || (ctx.req.headers as any).cookie;
-      currentToken = cookieHeader
-        ?.split("; ")
-        .find((c: string) => c.startsWith("session="))
-        ?.split("=")[1];
-    }
-
-    // Delete all sessions for this user except the current one
-    if (currentToken) {
-      await db
-        .delete(sessions)
-        .where(
-          sql`${sessions.userId} = ${ctx.user.id} AND ${sessions.token} != ${currentToken}`
-        );
-    } else {
-      // If no current token, delete all sessions
-      await db.delete(sessions).where(eq(sessions.userId, ctx.user.id));
-    }
-
-    return {
-      success: true,
-      message: "All other sessions have been logged out",
-    };
-  }),
-
-  // Cleanup expired sessions (can be called periodically or on demand)
   cleanupExpiredSessions: publicProcedure.mutation(async () => {
-    const now = new Date().toISOString();
-    await db
-      .delete(sessions)
-      .where(sql`${sessions.expiresAt} <= ${now}`);
+    await cleanupExpiredSessionsHelper();
 
     return {
       success: true,

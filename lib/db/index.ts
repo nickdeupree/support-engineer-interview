@@ -7,12 +7,7 @@ const dbPath = "bank.db";
 const sqlite = new Database(dbPath);
 export const db = drizzle(sqlite, { schema });
 
-const connections: Database.Database[] = [];
-
 export function initDb() {
-  const conn = new Database(dbPath);
-  connections.push(conn);
-
   // Create tables if they don't exist
   sqlite.exec(`
     CREATE TABLE IF NOT EXISTS users (
@@ -52,6 +47,8 @@ export function initDb() {
       processed_at TEXT
     );
 
+    CREATE INDEX IF NOT EXISTS idx_transactions_account_id ON transactions(account_id);
+
     CREATE TABLE IF NOT EXISTS sessions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL REFERENCES users(id),
@@ -59,7 +56,7 @@ export function initDb() {
       expires_at TEXT NOT NULL,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP
     );
-  `);
+  `);  
 }
 
 // Initialize database on import

@@ -19,21 +19,15 @@ const testEmails = [
 function check(email) {
   try {
     const result = isEmail(email);
-    console.log(`${String(email)} -> ${result}`);
   } catch (e) {
-    console.log(`${String(email)} -> throws: ${e.message}`);
   }
 }
 
-console.log('isEmail default behavior (require_tld = true):');
 for (const email of testEmails) check(email);
 
-console.log('\nisEmail with { require_tld: false } (allows domain `localhost`):');
 for (const email of testEmails) {
   try {
     const result = isEmail(email, { require_tld: false });
-    console.log(`${String(email)} -> ${result}`);
   } catch (e) {
-    console.log(`${String(email)} -> throws: ${e.message}`);
   }
 }
